@@ -19,4 +19,5 @@ igmpproxy_SOURCES = \
 	request.c \
 	rttable.c \
 	syslog.c \
-	udpsock.c
+	udpsock.c \
+	mut.c
