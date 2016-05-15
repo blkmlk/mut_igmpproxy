@@ -164,6 +164,28 @@ struct Config {
     unsigned int        lastMemberQueryCount;
     // Set if upstream leave messages should be sent instantly..
     unsigned short      fastUpstreamLeave;
+    unsigned short      mut_init;
+};
+
+    
+/**
+*   Routing table structure definition. Double linked list...
+*/
+struct RouteTable {
+    struct RouteTable   *nextroute;     // Pointer to the next group in line.
+    struct RouteTable   *prevroute;     // Pointer to the previous group in line.
+    uint32_t              group;          // The group to route
+    uint32_t              originAddr;     // The origin adress (only set on activated routes)
+    uint32_t              vifBits;        // Bits representing recieving VIFs.
+    struct mut_dst      *mut_list;
+
+    // Keeps the upstream membership state...
+    short               upstrState;     // Upstream membership state.
+
+    // These parameters contain aging details.
+    uint32_t              ageVifBits;     // Bits representing aging VIFs.
+    int                 ageValue;       // Downcounter for death.          
+    int                 ageActivity;    // Records any acitivity that notes there are still listeners.
 };
 
 // Defines the Index of the upstream VIF...
@@ -241,9 +263,10 @@ int leaveMcGroup( int UdpSock, struct IfDesc *IfDp, uint32_t mcastaddr );
 
 /* rttable.c
  */
+struct RouteTable *findRoute(uint32_t group);
 void initRouteTable();
 void clearAllRoutes();
-int insertRoute(uint32_t group, int ifx);
+int insertRoute(uint32_t group, uint32_t source, int ifx);
 int activateRoute(uint32_t group, uint32_t originAddr);
 void ageActiveRoutes();
 void setRouteLastMemberMode(uint32_t group);
@@ -276,4 +299,23 @@ void closeConfigFile();
 char* nextConfigToken();
 char* getCurrentConfigToken();
 
+/* mut.c
+*/
 
+#define NET_IPV4_MUT    126
+
+struct mut_dst {
+    struct mut_dst *next;
+    uint32_t ip;
+    int activated;
+};
+
+int insert_mut_dst(struct RouteTable *rt, uint32_t destination);
+struct mut_dst *get_mut_dst(struct RouteTable *rt, uint32_t destination);
+int delete_mut_dst(struct RouteTable *rt, uint32_t destination);
+int has_any_dst(uint32_t group);
+int activate_mut_rt(struct RouteTable *rt);
+int leave_mut_dst(uint32_t group, uint32_t destination);
+int add_mroute_mut_dst(uint32_t group, uint32_t source, uint32_t destination);
+int del_mroute_mut_dst(uint32_t group, uint32_t source, uint32_t destination);
+int sysctl_mut_init(int value);

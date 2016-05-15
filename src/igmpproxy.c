@@ -145,6 +145,7 @@ int main( int ArgCn, char *ArgVc[] ) {
 */
 int igmpProxyInit() {
     struct sigaction sa;
+    struct Config *conf = getCommonConfig();
     int Err;
 
 
@@ -153,6 +154,8 @@ int igmpProxyInit() {
     sigemptyset(&sa.sa_mask);
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
+
+    sysctl_mut_init(conf->mut_init);
 
     // Loads configuration for Physical interfaces...
     buildIfVc();    

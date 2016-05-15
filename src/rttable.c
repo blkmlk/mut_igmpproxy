@@ -38,27 +38,7 @@
 */
 
 #include "igmpproxy.h"
-    
-/**
-*   Routing table structure definition. Double linked list...
-*/
-struct RouteTable {
-    struct RouteTable   *nextroute;     // Pointer to the next group in line.
-    struct RouteTable   *prevroute;     // Pointer to the previous group in line.
-    uint32_t              group;          // The group to route
-    uint32_t              originAddr;     // The origin adress (only set on activated routes)
-    uint32_t              vifBits;        // Bits representing recieving VIFs.
 
-    // Keeps the upstream membership state...
-    short               upstrState;     // Upstream membership state.
-
-    // These parameters contain aging details.
-    uint32_t              ageVifBits;     // Bits representing aging VIFs.
-    int                 ageValue;       // Downcounter for death.          
-    int                 ageActivity;    // Records any acitivity that notes there are still listeners.
-};
-
-                 
 // Keeper for the routing table...
 static struct RouteTable   *routing_table;
 
@@ -203,8 +183,7 @@ struct RouteTable *findRoute(uint32_t group) {
 *   If the route already exists, the existing route 
 *   is updated...
 */
-int insertRoute(uint32_t group, int ifx) {
-    
+insertRoute(uint32_t group, uint32_t source, int ifx) {
     struct Config *conf = getCommonConfig();
     struct RouteTable*  croute;
 
@@ -238,6 +217,11 @@ int insertRoute(uint32_t group, int ifx) {
         newroute->originAddr = 0;
         newroute->nextroute  = NULL;
         newroute->prevroute  = NULL;
+        newroute->mut_list   = NULL;
+
+        if (conf->mut_init && insert_mut_dst(newroute, source) == 0) {
+           my_log(LOG_NOTICE, 0, "MUT: Inserting %s for %s", inetFmt(source, s1), inetFmt(group, s2));
+        }
 
         // The group is not joined initially.
         newroute->upstrState = ROUTESTATE_NOTJOINED;
@@ -314,6 +298,10 @@ int insertRoute(uint32_t group, int ifx) {
         // Register the VIF activity for the aging routine
         BIT_SET(croute->ageVifBits, ifx);
 
+        if (conf->mut_init && insert_mut_dst(croute, source) == 0) {
+            my_log(LOG_NOTICE, 0, "MUT: Adding to exist table(%s) source %s", inetFmt(group, s1), inetFmt(source, s2));
+        }
+
         // Log the cleanup in debugmode...
         my_log(LOG_INFO, 0, "Updated route entry for %s on VIF #%d",
             inetFmt(croute->group, s1), ifx);
@@ -325,6 +313,8 @@ int insertRoute(uint32_t group, int ifx) {
             if(!internUpdateKernelRoute(croute, 1)) {
                 my_log(LOG_WARNING, 0, "The insertion into Kernel failed.");
                 return 0;
+            } else if (conf->mut_init) {
+                activate_mut_rt(croute);
             }
         }
     }
@@ -347,20 +337,17 @@ int insertRoute(uint32_t group, int ifx) {
 */
 int activateRoute(uint32_t group, uint32_t originAddr) {
     struct RouteTable*  croute;
+    struct Config *conf = getCommonConfig();
     int result = 0;
 
     // Find the requested route.
     croute = findRoute(group);
     if(croute == NULL) {
         my_log(LOG_DEBUG, 0,
-		"No table entry for %s [From: %s]. Inserting route.",
+        "No table entry for %s [From: %s]. Inserting route. Skipping",
 		inetFmt(group, s1),inetFmt(originAddr, s2));
 
-        // Insert route, but no interfaces have yet requested it downstream.
-        insertRoute(group, -1);
-
-        // Retrieve the route from table...
-        croute = findRoute(group);
+        result = 1;
     }
 
     if(croute != NULL) {
@@ -378,6 +365,10 @@ int activateRoute(uint32_t group, uint32_t originAddr) {
         // Only update kernel table if there are listeners !
         if(croute->vifBits > 0) {
             result = internUpdateKernelRoute(croute, 1);
+        }
+
+        if (conf->mut_init) {
+            activate_mut_rt(croute);
         }
     }
     logRouteTable("Activate Route");
@@ -632,6 +623,7 @@ int internUpdateKernelRoute(struct RouteTable *route, int activate) {
 */
 void logRouteTable(char *header) {
         struct RouteTable*  croute = routing_table;
+        struct Config *conf = getCommonConfig();
         unsigned            rcount = 0;
     
         my_log(LOG_DEBUG, 0, "");
@@ -651,6 +643,14 @@ void logRouteTable(char *header) {
                     rcount, inetFmt(croute->originAddr, s1), inetFmt(croute->group, s2),
                     croute->ageValue,(croute->originAddr>0?"A":"I"),
                     croute->vifBits);
+                if (conf->mut_init) {
+                    struct mut_dst *i;
+
+                    my_log(LOG_DEBUG, 0, "UNICAST LIST:");
+                    for(i = croute->mut_list; i != NULL; i = i->next) {
+                        my_log(LOG_DEBUG, 0, "\t%s", inetFmt(i->ip, s1));
+                    }
+                }
                   
                 croute = croute->nextroute; 
         

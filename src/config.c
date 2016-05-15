@@ -80,7 +80,7 @@ void initCommonConfig() {
 
     // If 1, a leave message is sent upstream on leave messages from downstream.
     commonConfig.fastUpstreamLeave = 0;
-
+    commonConfig.mut_init = 0;
 }
 
 /**
@@ -145,6 +145,12 @@ int loadConfig(char *configFile) {
             commonConfig.fastUpstreamLeave = 1;
             
             // Read next token...
+            token = nextConfigToken();
+            continue;
+        } else if (strcmp("mut_init", token) == 0) {
+            my_log(LOG_DEBUG, 0, "Config: MUT mode enabled.");
+            commonConfig.mut_init = 1;
+
             token = nextConfigToken();
             continue;
         } else {

@@ -1,8 +1,10 @@
 #define _LINUX_IN_H
 #include <linux/types.h>
-#include <linux/mroute.h>
 #include <netinet/ip.h>
 #include <netinet/igmp.h>
+#include <linux/sysctl.h>
+
+#include "mroute.h"
 
 static inline u_short ip_data_len(const struct ip *ip)
 {

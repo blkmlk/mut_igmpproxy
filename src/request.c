@@ -83,7 +83,7 @@ void acceptGroupReport(uint32_t src, uint32_t group, uint8_t type) {
             inetFmt(group,s1), inetFmt(src,s2), sourceVif->index);
 
         // The membership report was OK... Insert it into the route table..
-        insertRoute(group, sourceVif->index);
+        insertRoute(group, src, sourceVif->index);
 
 
     } else {
@@ -99,6 +99,7 @@ void acceptGroupReport(uint32_t src, uint32_t group, uint8_t type) {
 */
 void acceptLeaveMessage(uint32_t src, uint32_t group) {
     struct IfDesc   *sourceVif;
+    struct Config *conf = getCommonConfig();
     
     my_log(LOG_DEBUG, 0,
 	    "Got leave message from %s to %s. Starting last member detection.",
@@ -117,6 +118,15 @@ void acceptLeaveMessage(uint32_t src, uint32_t group) {
         my_log(LOG_WARNING, 0, "No interfaces found for source %s",
             inetFmt(src,s1));
         return;
+    }
+
+    if (conf->mut_init && leave_mut_dst(group, src) == 0) {
+        my_log(LOG_NOTICE, 0, "MUT: Leaving %s from %s", inetFmt(src, s1), inetFmt(group, s2));
+
+        // Checking for any destinations for group
+        if (has_any_dst(group)) {
+            return;
+        }
     }
 
     // We have a IF so check that it's an downstream IF.
